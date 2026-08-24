@@ -34,6 +34,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
+import androidx.test.platform.app.InstrumentationRegistry
 import com.google.samples.apps.nowinandroid.MainActivity
 import com.google.samples.apps.nowinandroid.core.data.repository.NewsRepository
 import com.google.samples.apps.nowinandroid.core.data.repository.TopicsRepository
@@ -91,6 +92,13 @@ class UserJourneysTest {
     private val darkMode by composeTestRule.stringResource(SettingsR.string.feature_settings_impl_dark_mode_config_dark)
     private val dismissSettings by composeTestRule.stringResource(SettingsR.string.feature_settings_impl_dismiss_dialog_button_text)
 
+    /**
+     * Milliseconds to hold each screen state on, set with the `demoPauseMs` instrumentation
+     * argument to make a run watchable when recording. Zero, and therefore a no op, by default.
+     */
+    private val demoPauseMs: Long =
+        InstrumentationRegistry.getArguments().getString("demoPauseMs")?.toLongOrNull() ?: 0L
+
     @Before
     fun setup() = hiltRule.inject()
 
@@ -103,9 +111,11 @@ class UserJourneysTest {
             scrollForYouFeedTo(newsResource)
 
             bookmarkButtonOf(newsResource, contentDescription = bookmark).performClick()
+            demoPause()
 
             onNodeWithText(saved).performClick()
             onNodeWithText(newsResource.title, substring = true).assertExists()
+            demoPause()
         }
     }
 
@@ -119,9 +129,11 @@ class UserJourneysTest {
             bookmarkButtonOf(newsResource, contentDescription = bookmark).performClick()
 
             onNodeWithText(saved).performClick()
+            demoPause()
             bookmarkButtonOf(newsResource, contentDescription = unbookmark).performClick()
 
             onNodeWithText(emptySavedTitle).assertExists()
+            demoPause()
         }
     }
 
@@ -135,10 +147,13 @@ class UserJourneysTest {
             bookmarkButtonOf(newsResource, contentDescription = bookmark).performClick()
 
             onNodeWithText(saved).performClick()
+            demoPause()
             bookmarkButtonOf(newsResource, contentDescription = unbookmark).performClick()
+            demoPause()
 
             onNodeWithText(undo).performClick()
             onNodeWithText(newsResource.title, substring = true).assertExists()
+            demoPause()
         }
     }
 
@@ -146,11 +161,15 @@ class UserJourneysTest {
     fun changingDarkModePreference_isKeptWhenTheSettingsDialogIsReopened() {
         composeTestRule.apply {
             onNodeWithContentDescription(settings).performClick()
+            demoPause()
             onNodeWithText(darkMode).performClick()
+            demoPause()
             onNodeWithText(dismissSettings).performClick()
+            demoPause()
 
             onNodeWithContentDescription(settings).performClick()
             onNodeWithText(darkMode).assertIsSelected()
+            demoPause()
         }
     }
 
@@ -161,9 +180,11 @@ class UserJourneysTest {
         composeTestRule.apply {
             onNodeWithText(interests).performClick()
             onNodeWithTag(LIST_PANE_TEST_TAG).performScrollToNode(hasText(topic.name))
+            demoPause()
             onNodeWithText(topic.name).performClick()
 
             onNodeWithTag("topic:${topic.id}").assertExists()
+            demoPause()
         }
     }
 
@@ -184,11 +205,13 @@ class UserJourneysTest {
                 .filter(hasAnyAncestor(hasText(topic.name)))
                 .onFirst()
                 .assertExists()
+            demoPause()
 
             onNodeWithText(forYou).performClick()
             onNodeWithTag("forYou:topicSelection")
                 .performScrollToNode(hasContentDescription(topic.name))
             onNodeWithContentDescription(topic.name).assertIsOn()
+            demoPause()
         }
     }
 
@@ -200,11 +223,19 @@ class UserJourneysTest {
             onNodeWithTag("searchTextField")
                 .assertIsFocused()
                 .performTextInput("compose")
+            demoPause()
 
             Espresso.pressBack()
 
             onNodeWithText(forYou).assertExists()
+            demoPause()
         }
+    }
+
+    private fun demoPause() {
+        if (demoPauseMs <= 0L) return
+        composeTestRule.waitForIdle()
+        Thread.sleep(demoPauseMs)
     }
 
     private fun firstNewsResource(): NewsResource = runBlocking {
