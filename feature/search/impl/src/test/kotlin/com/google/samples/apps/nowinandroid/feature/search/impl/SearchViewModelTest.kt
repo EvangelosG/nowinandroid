@@ -18,6 +18,7 @@ package com.google.samples.apps.nowinandroid.feature.search.impl
 
 import androidx.lifecycle.SavedStateHandle
 import com.google.samples.apps.nowinandroid.core.analytics.NoOpAnalyticsHelper
+import com.google.samples.apps.nowinandroid.core.data.model.RecentSearchQuery
 import com.google.samples.apps.nowinandroid.core.domain.GetRecentSearchQueriesUseCase
 import com.google.samples.apps.nowinandroid.core.domain.GetSearchContentsUseCase
 import com.google.samples.apps.nowinandroid.core.testing.data.newsResourcesTestData
@@ -42,6 +43,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * To learn more about how this test handles Flows created with stateIn, see
@@ -158,6 +160,54 @@ class SearchViewModelTest {
         assertIs<EmptyQuery>(viewModel.searchResultUiState.value)
 
         collectJob.cancel()
+    }
+
+    @Test
+    fun triggeredSearchText_isAddedToRecentSearches() = runTest {
+        viewModel.onSearchTriggered("kotlin")
+
+        assertEquals(
+            expected = listOf("kotlin"),
+            actual = getRecentQueryUseCase().first().map(RecentSearchQuery::query),
+        )
+    }
+
+    @Test
+    fun whenRecentSearchesAreCleared_noRecentSearchRemains() = runTest {
+        viewModel.onSearchTriggered("kotlin")
+
+        viewModel.clearRecentSearches()
+
+        assertTrue(getRecentQueryUseCase().first().isEmpty())
+    }
+
+    @Test
+    fun whenFollowTopicIsCalled_followedTopicsAreUpdated() = runTest {
+        val topicId = "1"
+        viewModel.followTopic(topicId, true)
+
+        assertEquals(
+            expected = setOf(topicId),
+            actual = userDataRepository.userData.first().followedTopics,
+        )
+
+        viewModel.followTopic(topicId, false)
+
+        assertEquals(
+            expected = emptySet(),
+            actual = userDataRepository.userData.first().followedTopics,
+        )
+    }
+
+    @Test
+    fun whenSetNewsResourceViewedIsCalled_viewedStateIsUpdated() = runTest {
+        val newsResourceId = "123"
+        viewModel.setNewsResourceViewed(newsResourceId, true)
+
+        assertEquals(
+            expected = setOf(newsResourceId),
+            actual = userDataRepository.userData.first().viewedNewsResources,
+        )
     }
 
     @Test
