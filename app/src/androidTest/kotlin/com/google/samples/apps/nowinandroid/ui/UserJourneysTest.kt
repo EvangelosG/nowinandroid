@@ -46,6 +46,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -101,6 +102,16 @@ class UserJourneysTest {
 
     @Before
     fun setup() = hiltRule.inject()
+
+    /**
+     * Rests on the final state of each journey so consecutive tests are distinguishable when a run
+     * is recorded. Also a no op unless `demoPauseMs` is set.
+     */
+    @After
+    fun holdFinalState() {
+        if (demoPauseMs <= 0L) return
+        Thread.sleep(demoPauseMs * 2)
+    }
 
     @Test
     fun bookmarkingNewsResourceFromForYou_showsItOnSaved() {
