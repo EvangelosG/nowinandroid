@@ -152,9 +152,9 @@ It defaults to 0, so CI and normal runs are untouched, and classes that ignore t
 normally — they are just too fast to watch. At 800ms each journey takes ~4-7s.
 
 The final hold has its own floor rather than scaling with the pause, because the two are judged
-differently: the mid-test pauses set the pace, while the end state has to survive the ≥3 consecutive 1fps
-frames below whatever pace you pick. Scaling it (`pause * 2`) made 800ms fail that check at 1.6s while
-1500ms passed, i.e. it forced a slow run to get a readable ending.
+differently: the mid-test pauses set the pace, while the end state has to survive the ~3 consecutive 1fps
+frames below whatever pace you pick. Scaling it (`pause * 2`) gave 800ms a 1.6s hold that could not span
+them, i.e. it forced a slow run just to get a readable ending.
 
 Add the same three pieces to any UI test class you want to demo, and call `demoPause()` after each
 meaningful assertion — a journey with no pauses is invisible in the video.
@@ -202,6 +202,11 @@ idle or the wrong chunks). It cannot judge watchability, so eyeball the contact 
 `finalize_recording.sh` wrote and confirm each journey's end state occupies ~3+ consecutive one-second
 frames. Without pause hooks in the running test class this fails: `NavigationTest` alone is ~2s per
 test, one frame per screen, and only the burned-in labels make it followable.
+
+If you check that by comparing frames, allow a per-pixel tolerance (max delta ~8) instead of hashing
+them: `libx264 crf 26` perturbs a perfectly still screen by a few grey levels on a handful of pixels, so
+byte-identity fails on encoder noise while the hold is plainly there. Hashing found 3 identical frames in
+2 of 11 windows on a take where the tolerant comparison found 4-6 in all 11.
 
 ```bash
 ffmpeg -ss 95 -to 155 -i take_1x.mp4 -vf "fps=1,crop=520:1130:0:20,scale=150:-1,tile=15x4" -frames:v 1 sheet.png
