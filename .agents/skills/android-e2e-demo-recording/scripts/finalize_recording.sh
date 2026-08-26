@@ -3,18 +3,21 @@
 # Never ship the recorder's own *-edited.mp4: it is time lapsed (200s -> 18s).
 #
 # Usage: finalize_recording.sh <screencast-dir> [output.mp4]
+#   <screencast-dir> is ~/screencasts/<recording-id>/ on a Devin box.
 set -euo pipefail
 
 DIR="${1:?usage: finalize_recording.sh <screencast-dir> [output.mp4]}"
 OUT="${2:-$PWD/take_1x.mp4}"
+case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 
 cd "$DIR"
 mapfile -t RAWS < <(ls -- *-raw-*.mkv 2>/dev/null | sort)
 [ "${#RAWS[@]}" -gt 0 ] || { echo "no *-raw-*.mkv chunks in $DIR" >&2; exit 1; }
 
 # The chunks are one continuous capture, split only by the recorder.
-printf "file '%s'\n" "${RAWS[@]}" > /tmp/raws.txt
-ffmpeg -y -f concat -safe 0 -i /tmp/raws.txt \
+# ffmpeg resolves concat entries relative to the list file, so use absolute paths.
+printf "file '%s'\n" "${RAWS[@]/#/$PWD/}" > "$DIR/raws.txt"
+ffmpeg -y -f concat -safe 0 -i "$DIR/raws.txt" \
     -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p "$OUT"
 
 SHEET="${OUT%.mp4}_sheet.png"

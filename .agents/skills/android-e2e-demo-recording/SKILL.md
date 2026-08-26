@@ -61,14 +61,15 @@ $S/verify_evidence.sh
 - every `testcase name=` is listed, so a filter that silently matched nothing is caught;
 - the test *set* is diffed against `baseline_testcases.txt` rather than against a count hard coded in
   the doc, so the baseline cannot rot and a real regression cannot hide behind a stale number. That
-  file is written on the first run and deliberately not committed: it must describe the branch you are
+  file is written on the first run and gitignored, not committed: it must describe the branch you are
   on;
 - unit XMLs report `failures="0" errors="0"`.
 
 Verified on this box against `main`: 11 unit tests (`GetFollowableTopicsUseCaseTest`,
-`SearchViewModelTest`) and 12 instrumented `NavigationTest` tests, 1 of which is skipped
-(`navigationBar_multipleBackStackInterests`) — the console prints `Finished 13 tests` because it
-counts the skip separately. `UserJourneysTest` and its pause hooks add 7 more once that work lands.
+`SearchViewModelTest`) and 12 instrumented `NavigationTest` tests (`tests="12" skipped="1"`), so the
+console prints `Starting 12 tests` and logcat ends with `run finished: 11 tests, 0 failed, 1 ignored`
+— 11 of them actually execute and are annotatable. `UserJourneysTest` and its pause hooks add 7 more
+once that work lands.
 
 Result files, if you need them directly:
 - unit: `<module>/build/test-results/testDemoDebugUnitTest/*.xml`
@@ -90,13 +91,17 @@ $S/run_demo_suite.sh --prewarm          # off camera
 $S/place_windows.sh                     # derives geometry from the actual display
 # in the konsole that just opened, make it readable on video:
 #   printf '\033]50;FontSize=16\a'; clear
-# start the screen recording, then in that same konsole, and nothing else:
+# start the screen recording, note when it started, then in that same konsole and nothing else:
+date +%s > /tmp/recording_start_epoch
 $S/run_demo_suite.sh --pause-ms 1500
-# stop the recording
-$S/finalize_recording.sh <screencast-dir> take_1x.mp4
-$S/annotations_from_log.sh              # one annotation window per test
+# stop the recording; the chunks land in ~/screencasts/<recording-id>/
+$S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4
+$S/annotations_from_log.sh --epoch-file /tmp/recording_start_epoch
 $S/verify_evidence.sh --video take_1x.mp4
 ```
+
+`--prewarm` exits as soon as it is parsed, so run it on its own — combining it with `--pause-ms`
+silently drops the other flag.
 
 ### Why each piece exists
 
@@ -124,15 +129,26 @@ suite costs ~21s extra. Add the same three pieces to any other UI test class you
 `demoPause()` after each meaningful assertion — a journey with no pauses is invisible in the video.
 File: `app/src/androidTest/kotlin/com/google/samples/apps/nowinandroid/ui/UserJourneysTest.kt`.
 
-**Annotations are derived after the run, from timestamps.** `run_demo_suite.sh` starts an
-`adb logcat -v epoch -s TestRunner:I` watcher and records the run's start epoch;
-`annotations_from_log.sh` turns that into `<class> <method> <start-offset> <end-offset>`. Emit **one
-`test_start` plus one grouped assertion per test** — the number of annotations is what the UI reports as
-the test count, which is why phase-level markers once surfaced a 19-test run as "2 tests passed". Test
-execution order is not source order; read it from the log.
+**Labels are derived after the run, from timestamps.** `run_demo_suite.sh` starts an
+`adb logcat -v epoch -s TestRunner:I` watcher; `annotations_from_log.sh` turns that into
+`<class> <method> <start-offset> <end-offset>`. Offsets are relative to whatever epoch file you pass —
+default is the *run* start, so pass `--epoch-file /tmp/recording_start_epoch` for offsets that line up
+with the video.
 
-Optional: the same offsets can drive an `ffmpeg drawtext` overlay of the running test name, making the
-video self-documenting and independent of the annotation UI.
+Burn them into the video with `ffmpeg drawtext`; that is the default, because `annotate_recording` can
+only stamp the *current* moment of a live recording — there is no way to apply post-run offsets, and a
+tool round-trip is 1-2s. Live annotation is therefore only viable when `demoPauseMs` stretches each test
+to ~10s or more. When you do annotate live, emit **one `test_start` plus one grouped assertion per
+test** — the number of annotations is what the UI reports as the test count, which is why phase-level
+markers once surfaced a 19-test run as "2 tests passed". Test execution order is not source order; read
+it from the log.
+
+```bash
+# one drawtext filter per row of annotations_from_log.sh, offsets relative to the video
+ffmpeg -y -i take_1x.mp4 -vf "drawtext=text='navigationBar_reselectTab_keepsState':\
+x=20:y=20:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:enable='between(t,31,33)'" \
+    -c:a copy take_1x_labelled.mp4
+```
 
 **Device-only capture** is an alternative when the terminal is not needed (crisper, but loses the
 console): `adb shell screenrecord` writes ~180s per file, so loop segments and concat them.
@@ -151,9 +167,12 @@ ffmpeg -f concat -safe 0 -i /tmp/list.txt -c copy device.mp4
 
 ### Before you ship the video
 
-`verify_evidence.sh --video take_1x.mp4` checks results plus duration against the measured wall clock.
-Then eyeball the contact sheet that `finalize_recording.sh` wrote, and confirm each journey's end state
-occupies ~3+ consecutive one-second frames:
+`verify_evidence.sh --video take_1x.mp4` checks the results, and checks the video duration against the
+measured wall clock in both directions (too short = the time-lapsed export; more than 2x = untrimmed
+idle or the wrong chunks). It cannot judge watchability, so eyeball the contact sheet that
+`finalize_recording.sh` wrote and confirm each journey's end state occupies ~3+ consecutive one-second
+frames. Without pause hooks in the running test class this fails: `NavigationTest` alone is ~2s per
+test, one frame per screen, and only the burned-in labels make it followable.
 
 ```bash
 ffmpeg -ss 95 -to 155 -i take_1x.mp4 -vf "fps=1,crop=520:1130:0:20,scale=150:-1,tile=15x4" -frames:v 1 sheet.png
@@ -174,6 +193,7 @@ Trim any leading idle with `-ss`. Ship one mp4.
 | `screenrecord` stops early | ~180s per file limit, and check free space on `/sdcard`. |
 | Console floods with `preBuild UP-TO-DATE` | Use `grep -E`, not `-Ei`: case-insensitive `BUILD` matches everything. |
 | Windows overlap or hide under the panel | Re-run `place_windows.sh`; it re-measures and re-places. |
+| `ffmpeg: Impossible to open '/tmp/...-raw-000.mkv'` | The concat list must sit beside the chunks or hold absolute paths; `finalize_recording.sh` does this. |
 
 ## Who runs this
 

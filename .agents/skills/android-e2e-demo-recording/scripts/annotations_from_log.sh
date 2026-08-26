@@ -2,9 +2,12 @@
 # Derive one annotation window per test from the instrumentation log, AFTER the
 # run. Racing the run with sleep loops mis-attributes journeys; timestamps do not.
 #
-# Usage: annotations_from_log.sh [--log /tmp/journeys.log] [--epoch-file /tmp/demo_run_start_epoch]
-# Output: <class> <method> <start-offset-s> <end-offset-s>, offsets relative to
-# the start of the recording, ready to drive annotate_recording or ffmpeg drawtext.
+# Usage: annotations_from_log.sh [--log /tmp/journeys.log] [--epoch-file <file>]
+# Output: <class> <method> <start-offset-s> <end-offset-s>.
+# Offsets are relative to the epoch in --epoch-file, which defaults to the RUN
+# start (/tmp/demo_run_start_epoch). For offsets that line up with the video,
+# write the recorder's start time (`date +%s > /tmp/recording_start_epoch`) when
+# you start recording and pass --epoch-file /tmp/recording_start_epoch.
 set -euo pipefail
 
 LOG=/tmp/journeys.log
@@ -35,8 +38,15 @@ awk -v base="$BASE" '
 
 cat >&2 <<'EOF'
 
-One annotation per test above: test_start at the start offset, a single grouped
-assertion at the end offset. Do not annotate per phase; the run reports as many
-tests as you annotate, so phase level markers show up as "2 tests passed".
+One annotation window per test above. Two ways to use them:
+
+- ffmpeg drawtext overlay (default): these offsets are post hoc, so burning the
+  test name into the video is the only way to label tests shorter than ~10s.
+- annotate_recording: it can only stamp the current moment of a LIVE recording,
+  so it works only when demoPauseMs makes each test long enough (~10s+) to call
+  it in time. Then emit one test_start plus one grouped assertion per test: the
+  run reports as many tests as you annotate, so phase level markers show up as
+  "2 tests passed".
+
 Execution order is not source order, always read it from this log.
 EOF

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Definition of done for a demo run. Prints the evidence and fails on anything
-# that has previously shipped broken: zero-match test filters, a missing pause
-# hold, or a time lapsed video.
+# that has previously shipped broken: zero-match test filters, a changed test
+# set, or a video whose duration does not match the measured run.
+# It cannot judge watchability: check the contact sheet by eye for that.
 #
 # Usage: verify_evidence.sh [--results-only] [--video take_1x.mp4]
 set -uo pipefail
@@ -36,7 +37,7 @@ else
     ERRORS=$(grep -o 'errors="[0-9]*"' "$X" | head -1 | tr -dc 0-9)
     # Named test counts are asserted against the previous run, not a constant in
     # this file, so the baseline cannot silently rot.
-    BASELINE=.agents/skills/android-e2e-demo-recording/baseline_testcases.txt
+    BASELINE="${BASELINE:-.agents/skills/android-e2e-demo-recording/baseline_testcases.txt}"
     CURRENT=$(grep -o 'testcase name="[a-zA-Z_0-9]*"' "$X" | sort)
     if [ -f "$BASELINE" ]; then
         if ! diff -q <(echo "$CURRENT") "$BASELINE" >/dev/null; then
@@ -77,6 +78,8 @@ if [ -n "$VIDEO" ]; then
         # The screen recorder time lapses its own -edited.mp4; a video much
         # shorter than the run is that bug, not a fast test suite.
         [ "${DUR:-0}" -lt $((WALL * 8 / 10)) ] && bad "video is ${DUR}s for a ${WALL}s run: this is the time lapsed export, re encode the raw chunks"
+        # The opposite failure: shipping a take padded with idle, or the wrong file.
+        [ "${DUR:-0}" -gt $((WALL * 2)) ] && bad "video is ${DUR}s for a ${WALL}s run: trim the idle head/tail, or you concatenated the wrong chunks"
     fi
 fi
 
