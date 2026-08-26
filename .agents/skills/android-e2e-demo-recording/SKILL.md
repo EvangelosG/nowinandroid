@@ -49,7 +49,7 @@ with the shell that launched it (it looks like a clean boot followed by "no emul
 | Pre-warm build (`--prewarm`) | 5-10 min | ~30s |
 | Unit tasks (2 modules) | ~1 min | ~2s |
 | `$APP_MODULE:connected${VARIANT}AndroidTest` | ~4 min | ~1m10s |
-| Full on-camera take at `--pause-ms 800` | — | ~3.5 min |
+| Full on-camera take | — | ~2.5 min |
 
 Always pre-warm off camera. An un-warmed take is a five minute video of a Gradle build.
 
@@ -68,7 +68,7 @@ Provisioned by the repo blueprint; verify rather than assume:
 S=.agents/skills/android-e2e-demo-recording/scripts
 $S/boot_emulator.sh                     # idempotent; waits for sys.boot_completed, not just adb
 $S/run_demo_suite.sh --prewarm          # build everything first
-$S/run_demo_suite.sh --pause-ms 0       # no pauses when you are not recording
+$S/run_demo_suite.sh
 $S/verify_evidence.sh
 ```
 
@@ -85,7 +85,7 @@ Verified on this box against `main`: 11 unit tests (`GetFollowableTopicsUseCaseT
 `SearchViewModelTest`) and 12 instrumented `NavigationTest` tests (`tests="12" skipped="1"`), so the
 console prints `Starting 12 tests` and logcat ends with `run finished: 11 tests, 0 failed, 1 ignored`
 — 11 of them actually execute and are annotatable. `NavigationTest` reads `demoPauseMs`, so
-`--pause-ms 800` stretches those 11 from ~23s to a followable run.
+`--pause-ms 800` stretches those 11 from ~23s to ~80s if you want a slower take.
 
 Result files, if you need them directly:
 - unit: `<module>/build/test-results/testDemoDebugUnitTest/*.xml`
@@ -108,7 +108,7 @@ $S/place_windows.sh                     # derives geometry from the actual displ
 # in the konsole that just opened, make it readable on video:
 #   printf '\033]50;FontSize=16\a'; clear
 # start the screen recording, then in that same konsole and nothing else:
-$S/run_demo_suite.sh --pause-ms 800
+$S/run_demo_suite.sh                    # add --pause-ms 800 for a slower, longer take
 # stop the recording; the chunks land in ~/screencasts/<recording-id>/
 $S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4   # also writes /tmp/video_start_epoch
 $S/label_video.sh take_1x.mp4 take_1x_labelled.mp4
@@ -116,8 +116,8 @@ $S/verify_evidence.sh --video take_1x_labelled.mp4
 ```
 
 Run `verify_evidence.sh` before anything else touches the device: every run overwrites the result XMLs
-and the wall-clock files it reads, so a later run (a `--pause-ms 0` sanity check, say) makes it judge the
-shipped take against the wrong numbers.
+and the wall-clock files it reads, so a later run makes it judge the shipped take against the wrong
+numbers.
 
 Do not try to note the recording's start time by hand: the recorder is already capturing while you type,
 and that gap (5s on one take here, arbitrary in general) drifts every label by two or three tests.
@@ -148,13 +148,15 @@ private fun demoPause() { if (demoPauseMs > 0) Thread.sleep(demoPauseMs) }
 fun holdFinalState() { if (demoPauseMs > 0) Thread.sleep(maxOf(demoPauseMs * 2, 3_000L)) }
 ```
 
-It defaults to 0, so CI and normal runs are untouched, and classes that ignore the argument still run
-normally — they are just too fast to watch. At 800ms each journey takes ~4-7s.
+It defaults to 0, so CI, normal runs and the default take are untouched, and classes that ignore the
+argument still run normally. **Pausing is off by default**: at 800ms the 11 tests take ~80s instead of
+~23s, and a 100s video of the same eleven assertions is a worse artifact than a 40s one where the labels
+carry the narration. Reach for `--pause-ms` only when a reviewer has to read the screens themselves.
 
-The final hold has its own floor rather than scaling with the pause, because the two are judged
-differently: the mid-test pauses set the pace, while the end state has to survive the ~3 consecutive 1fps
-frames below whatever pace you pick. Scaling it (`pause * 2`) gave 800ms a 1.6s hold that could not span
-them, i.e. it forced a slow run just to get a readable ending.
+When you do, note that the final hold has its own floor rather than scaling with the pause: the mid-test
+pauses set the pace, while the end state has to survive the ~3 consecutive 1fps frames below whatever
+pace you pick. Scaling it (`pause * 2`) gave 800ms a 1.6s hold that could not span them, i.e. it forced a
+slow run just to get a readable ending.
 
 Add the same three pieces to any UI test class you want to demo, and call `demoPause()` after each
 meaningful assertion — a journey with no pauses is invisible in the video.
@@ -199,14 +201,14 @@ ffmpeg -f concat -safe 0 -i /tmp/list.txt -c copy device.mp4
 `verify_evidence.sh --video take_1x.mp4` checks the results, and checks the video duration against the
 measured wall clock in both directions (too short = the time-lapsed export; more than 2x = untrimmed
 idle or the wrong chunks). It cannot judge watchability, so eyeball the contact sheet that
-`finalize_recording.sh` wrote and confirm each journey's end state occupies ~3+ consecutive one-second
-frames. Without pause hooks in the running test class this fails: `NavigationTest` alone is ~2s per
-test, one frame per screen, and only the burned-in labels make it followable.
+`finalize_recording.sh` wrote: every test should appear on it as a distinct screen under its own label.
+At the default pace that is ~2s per test — the labels, not the dwell time, are what make it followable.
 
-If you check that by comparing frames, allow a per-pixel tolerance (max delta ~8) instead of hashing
-them: `libx264 crf 26` perturbs a perfectly still screen by a few grey levels on a handful of pixels, so
-byte-identity fails on encoder noise while the hold is plainly there. Hashing found 3 identical frames in
-2 of 11 windows on a take where the tolerant comparison found 4-6 in all 11.
+On a `--pause-ms` take, hold each journey's end state for ~3+ consecutive one-second frames. Check that
+with a per-pixel tolerance (max delta ~8) rather than by hashing frames: `libx264 crf 26` perturbs a
+perfectly still screen by a few grey levels on a handful of pixels, so byte-identity fails on encoder
+noise while the hold is plainly there. Hashing found 3 identical frames in 2 of 11 windows on a take
+where the tolerant comparison found 4-6 in all 11.
 
 ```bash
 ffmpeg -ss 95 -to 155 -i take_1x.mp4 -vf "fps=1,crop=520:1130:0:20,scale=150:-1,tile=15x4" -frames:v 1 sheet.png

@@ -11,7 +11,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$SCRIPT_DIR/_config.sh"
 cd "$REPO_ROOT" || exit 1
 
-PAUSE_MS=1500
+PAUSE_MS=0     # pauses cost more video than they buy; opt in per take
 read -r -a UNIT_TASK_LIST <<< "$UNIT_TASKS"
 JOURNEY_LOG=/tmp/journeys.log
 
