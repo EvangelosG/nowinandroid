@@ -107,15 +107,17 @@ $S/run_demo_suite.sh --prewarm          # off camera
 $S/place_windows.sh                     # derives geometry from the actual display
 # in the konsole that just opened, make it readable on video:
 #   printf '\033]50;FontSize=16\a'; clear
-# start the screen recording, note when it started, then in that same konsole and nothing else:
-date +%s > /tmp/recording_start_epoch
+# start the screen recording, then in that same konsole and nothing else:
 $S/run_demo_suite.sh --pause-ms 1500
 # stop the recording; the chunks land in ~/screencasts/<recording-id>/
-$S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4
-$S/annotations_from_log.sh --epoch-file /tmp/recording_start_epoch
-$S/label_video.sh take_1x.mp4 take_1x_labelled.mp4 --epoch-file /tmp/recording_start_epoch
+$S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4   # also writes /tmp/video_start_epoch
+$S/label_video.sh take_1x.mp4 take_1x_labelled.mp4
 $S/verify_evidence.sh --video take_1x_labelled.mp4
 ```
+
+Do not try to note the recording's start time by hand: the recorder is already capturing while you type,
+and that gap (5s on one take here, arbitrary in general) drifts every label by two or three tests.
+`finalize_recording.sh` takes it from the first chunk's creation time instead.
 
 `--prewarm` exits as soon as it is parsed, so run it on its own — combining it with `--pause-ms`
 silently drops the other flag.
@@ -149,9 +151,9 @@ costs ~21s extra. Add the same three pieces to any UI test class you want to dem
 
 **Labels are derived after the run, from timestamps.** `run_demo_suite.sh` starts an
 `adb logcat -v epoch -s TestRunner:I` watcher; `annotations_from_log.sh` turns that into
-`<class> <method> <start-offset> <end-offset>`. Offsets are relative to whatever epoch file you pass —
-default is the *run* start, so pass `--epoch-file /tmp/recording_start_epoch` for offsets that line up
-with the video.
+`<class> <method> <start-offset> <end-offset>`. Offsets are relative to whatever epoch file you pass;
+its own default is the *run* start, while `label_video.sh` defaults to `/tmp/video_start_epoch` so its
+offsets are video time.
 
 Burn them into the video with `ffmpeg drawtext`; that is the default, because `annotate_recording` can
 only stamp the *current* moment of a live recording — there is no way to apply post-run offsets, and a
@@ -162,8 +164,10 @@ markers once surfaced a 19-test run as "2 tests passed". Test execution order is
 it from the log.
 
 `label_video.sh` builds one `drawtext` filter per row of `annotations_from_log.sh` and burns the name of
-the running test into its own time window. No test name appears anywhere in the skill: they come out of
-the device log, so the overlay follows whatever the app actually ran.
+the running test into its own time window, at the foot of the emulator pane (`place_windows.sh` leaves
+its geometry in `/tmp/demo_emulator_geometry`, and long names are scaled down to fit). No test name
+appears anywhere in the skill: they come out of the device log, so the overlay follows whatever the app
+actually ran.
 
 **Device-only capture** is an alternative when the terminal is not needed (crisper, but loses the
 console): `adb shell screenrecord` writes ~180s per file, so loop segments and concat them.
@@ -194,6 +198,9 @@ ffmpeg -ss 95 -to 155 -i take_1x.mp4 -vf "fps=1,crop=520:1130:0:20,scale=150:-1,
 ```
 
 Trim any leading idle with `-ss`. Ship one mp4.
+
+Expect the console pane to sit empty for the first ~25s: each phase clears the screen and only its
+summary lines survive the filter. That is the filter working, not a failed capture.
 
 ## Troubleshooting
 

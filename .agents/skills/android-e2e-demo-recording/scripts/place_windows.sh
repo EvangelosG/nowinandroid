@@ -58,6 +58,9 @@ read -r TERM_ID _ _ _ _ < <(win_geom "$TERM_RE")
 wmctrl -i -r "$TERM_ID" -e "0,$TERM_X,$TOP,$TERM_W,$USABLE_H"
 sleep 1
 
+# label_video.sh keeps its overlay inside this pane instead of across the desktop.
+echo "$EMU_X $TOP $EMU_W $USABLE_H" > /tmp/demo_emulator_geometry
+
 echo "display ${SCREEN_W}x${SCREEN_H}; emulator ${EMU_W}px wide at x=${EMU_X}; konsole ${TERM_W}px at x=${TERM_X}"
 wmctrl -lG | grep -E "$EMU_RE|$TERM_RE"
 echo "Run this inside the konsole to enlarge its font: printf '\\033]50;FontSize=16\\a'; clear"
