@@ -115,6 +115,10 @@ $S/label_video.sh take_1x.mp4 take_1x_labelled.mp4
 $S/verify_evidence.sh --video take_1x_labelled.mp4
 ```
 
+Run `verify_evidence.sh` before anything else touches the device: every run overwrites the result XMLs
+and the wall-clock files it reads, so a later run (a `--pause-ms 0` sanity check, say) makes it judge the
+shipped take against the wrong numbers.
+
 Do not try to note the recording's start time by hand: the recorder is already capturing while you type,
 and that gap (5s on one take here, arbitrary in general) drifts every label by two or three tests.
 `finalize_recording.sh` takes it from the first chunk's creation time instead.

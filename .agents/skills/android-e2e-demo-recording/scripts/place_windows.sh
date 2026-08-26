@@ -41,7 +41,9 @@ fi
 # Close only known noise. Do not sweep every other window: the emulator's own
 # side toolbar is a separate top level window named "Emulator", and closing it
 # closes the device.
-wmctrl -l | grep -E 'Chrome|Nested Virtualization|Firefox' | awk '{print $1}' | while read -r id; do
+# grep exits 1 when the box happens to have none of them open, which pipefail
+# would turn into an abort before anything is placed.
+wmctrl -l | { grep -E 'Chrome|Nested Virtualization|Firefox' || true; } | awk '{print $1}' | while read -r id; do
     wmctrl -i -c "$id" || true
 done
 
