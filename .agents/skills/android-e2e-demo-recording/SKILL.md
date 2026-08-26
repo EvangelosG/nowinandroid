@@ -84,8 +84,8 @@ $S/verify_evidence.sh
 Verified on this box against `main`: 11 unit tests (`GetFollowableTopicsUseCaseTest`,
 `SearchViewModelTest`) and 12 instrumented `NavigationTest` tests (`tests="12" skipped="1"`), so the
 console prints `Starting 12 tests` and logcat ends with `run finished: 11 tests, 0 failed, 1 ignored`
-— 11 of them actually execute and are annotatable. `UserJourneysTest` and its pause hooks add 7 more
-once that work lands.
+— 11 of them actually execute and are annotatable. `NavigationTest` reads `demoPauseMs`, so
+`--pause-ms 1500` stretches those 11 from ~23s to a followable run.
 
 Result files, if you need them directly:
 - unit: `<module>/build/test-results/testDemoDebugUnitTest/*.xml`
