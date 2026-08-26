@@ -34,6 +34,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.espresso.Espresso
 import androidx.test.espresso.NoActivityResumedException
+import androidx.test.platform.app.InstrumentationRegistry
 import com.google.samples.apps.nowinandroid.MainActivity
 import com.google.samples.apps.nowinandroid.R
 import com.google.samples.apps.nowinandroid.core.data.repository.NewsRepository
@@ -45,6 +46,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Rule
@@ -96,14 +98,32 @@ class NavigationTest {
     private val brand by composeTestRule.stringResource(SettingsR.string.feature_settings_impl_brand_android)
     private val ok by composeTestRule.stringResource(SettingsR.string.feature_settings_impl_dismiss_dialog_button_text)
 
+    /**
+     * Slows the test down so a screen recording is followable. Zero unless the run passes
+     * `-Pandroid.testInstrumentationRunnerArguments.demoPauseMs=<ms>`, so CI is unaffected.
+     */
+    private val demoPauseMs: Long =
+        InstrumentationRegistry.getArguments().getString("demoPauseMs")?.toLongOrNull() ?: 0L
+
+    private fun demoPause() {
+        if (demoPauseMs > 0) Thread.sleep(demoPauseMs)
+    }
+
     @Before
     fun setup() = hiltRule.inject()
+
+    /** Rests on the end state so consecutive tests are distinguishable on the recording. */
+    @After
+    fun holdFinalState() {
+        if (demoPauseMs > 0) Thread.sleep(demoPauseMs * 2)
+    }
 
     @Test
     fun firstScreen_isForYou() {
         composeTestRule.apply {
             // VERIFY for you is selected
             onNodeWithText(forYou).assertIsSelected()
+            demoPause()
         }
     }
 
@@ -121,10 +141,12 @@ class NavigationTest {
             onNodeWithText(sampleTopic).performClick()
             // WHEN the user navigates to the Interests destination
             onNodeWithText(interests).performClick()
+            demoPause()
             // AND the user navigates to the For You destination
             onNodeWithText(forYou).performClick()
             // THEN the state of the For You destination is restored
             onNodeWithContentDescription(sampleTopic).assertIsOn()
+            demoPause()
         }
     }
 
@@ -136,10 +158,12 @@ class NavigationTest {
         composeTestRule.apply {
             // GIVEN the user follows a topic
             onNodeWithText(sampleTopic).performClick()
+            demoPause()
             // WHEN the user taps the For You navigation bar item
             onNodeWithText(forYou).performClick()
             // THEN the state of the For You destination is restored
             onNodeWithContentDescription(sampleTopic).assertIsOn()
+            demoPause()
         }
     }
 
@@ -159,12 +183,15 @@ class NavigationTest {
         composeTestRule.apply {
             // GIVEN the user is on any of the top level destinations, THEN the Up arrow is not shown.
             onNodeWithContentDescription(navigateUp).assertDoesNotExist()
+            demoPause()
 
             onNodeWithText(saved).performClick()
             onNodeWithContentDescription(navigateUp).assertDoesNotExist()
+            demoPause()
 
             onNodeWithText(interests).performClick()
             onNodeWithContentDescription(navigateUp).assertDoesNotExist()
+            demoPause()
         }
     }
 
@@ -173,16 +200,19 @@ class NavigationTest {
         composeTestRule.apply {
             // Verify that the top bar contains the app name on the first screen.
             onNodeWithText(appName).assertExists()
+            demoPause()
 
             // Go to the saved tab, verify that the top bar contains "saved". This means
             // we'll have 2 elements with the text "saved" on screen. One in the top bar, and
             // one in the bottom navigation.
             onNodeWithText(saved).performClick()
             onAllNodesWithText(saved).assertCountEquals(2)
+            demoPause()
 
             // As above but for the interests tab.
             onNodeWithText(interests).performClick()
             onAllNodesWithText(interests).assertCountEquals(2)
+            demoPause()
         }
     }
 
@@ -190,12 +220,15 @@ class NavigationTest {
     fun topLevelDestinations_showSettingsIcon() {
         composeTestRule.apply {
             onNodeWithContentDescription(settings).assertExists()
+            demoPause()
 
             onNodeWithText(saved).performClick()
             onNodeWithContentDescription(settings).assertExists()
+            demoPause()
 
             onNodeWithText(interests).performClick()
             onNodeWithContentDescription(settings).assertExists()
+            demoPause()
         }
     }
 
@@ -206,6 +239,7 @@ class NavigationTest {
 
             // Check that one of the settings is actually displayed.
             onNodeWithText(brand).assertExists()
+            demoPause()
         }
     }
 
@@ -215,10 +249,12 @@ class NavigationTest {
             // Navigate to the saved screen, open the settings dialog, then close it.
             onNodeWithText(saved).performClick()
             onNodeWithContentDescription(settings).performClick()
+            demoPause()
             onNodeWithText(ok).performClick()
 
             // Check that the saved screen is still visible and selected.
             onNode(hasText(saved) and hasTestTag("NiaNavItem")).assertIsSelected()
+            demoPause()
         }
     }
 
@@ -230,8 +266,10 @@ class NavigationTest {
         composeTestRule.apply {
             // GIVEN the user navigates to the Interests destination
             onNodeWithText(interests).performClick()
+            demoPause()
             // and then navigates to the For you destination
             onNodeWithText(forYou).performClick()
+            demoPause()
             // WHEN the user uses the system button/gesture to go back
             Espresso.pressBack()
             // THEN the app quits
@@ -247,11 +285,13 @@ class NavigationTest {
         composeTestRule.apply {
             // GIVEN the user navigated to the Interests destination
             onNodeWithText(interests).performClick()
+            demoPause()
             // TODO: Add another destination here to increase test coverage, see b/226357686.
             // WHEN the user uses the system button/gesture to go back,
             Espresso.pressBack()
             // THEN the app shows the For You destination
             onNodeWithText(forYou).assertExists()
+            demoPause()
         }
     }
 
@@ -294,6 +334,7 @@ class NavigationTest {
             // Get its first topic and follow it
             val topic = newsResource.topics.first()
             onNodeWithText(topic.name).performClick()
+            demoPause()
 
             // Get the news feed and scroll to the news resource
             // Note: Possible flakiness. If the content of the news resource is long then the topic
@@ -320,6 +361,7 @@ class NavigationTest {
 
             // Verify that we're on the correct topic details screen
             onNodeWithTag("topic:${topic.id}").assertExists()
+            demoPause()
         }
     }
 }

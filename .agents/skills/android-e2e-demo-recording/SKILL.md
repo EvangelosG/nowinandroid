@@ -132,7 +132,7 @@ polls for windows instead of sleeping, so it does not race konsole's startup, an
 of any size.
 
 **Pauses come from the tests, opt-in.** A test class opts in by reading `$PAUSE_ARG` (`demoPauseMs`
-here; in this repo `UserJourneysTest` does it):
+here; in this repo `NavigationTest` does it):
 
 ```kotlin
 private val demoPauseMs: Long =
