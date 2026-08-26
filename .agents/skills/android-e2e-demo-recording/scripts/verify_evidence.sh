@@ -8,7 +8,9 @@
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd "$SCRIPT_DIR/../../../.." || exit 1
+# shellcheck source=_config.sh
+. "$SCRIPT_DIR/_config.sh"
+cd "$REPO_ROOT" || exit 1
 
 RESULTS_ONLY=0
 VIDEO=""
@@ -24,7 +26,7 @@ FAIL=0
 note() { echo "  $*"; }
 bad() { echo "FAIL: $*" >&2; FAIL=1; }
 
-X=$(ls app/build/outputs/androidTest-results/connected/debug/flavors/demo/TEST-*.xml 2>/dev/null | head -1)
+X=$(instrumented_xmls | head -1)
 if [ -z "$X" ]; then
     bad "no instrumented result XML; the run never reached the device"
 else
@@ -37,7 +39,7 @@ else
     ERRORS=$(grep -o 'errors="[0-9]*"' "$X" | head -1 | tr -dc 0-9)
     # Named test counts are asserted against the previous run, not a constant in
     # this file, so the baseline cannot silently rot.
-    BASELINE="${BASELINE:-.agents/skills/android-e2e-demo-recording/baseline_testcases.txt}"
+    BASELINE="${BASELINE:-$SKILL_DIR/baseline_testcases.txt}"
     CURRENT=$(grep -o 'testcase name="[a-zA-Z_0-9]*"' "$X" | sort)
     if [ -f "$BASELINE" ]; then
         if ! diff -q <(echo "$CURRENT") "$BASELINE" >/dev/null; then
@@ -55,12 +57,16 @@ else
 fi
 
 echo "unit:"
-for f in core/domain/build/test-results/testDemoDebugUnitTest/*.xml \
-         feature/search/impl/build/test-results/testDemoDebugUnitTest/*.xml; do
-    [ -f "$f" ] || continue
-    note "$(head -2 "$f" | grep -o 'name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"')"
-    head -2 "$f" | grep -q 'failures="0" errors="0"' || bad "unit failures in $f"
-done
+UNIT_SEEN=0
+while read -r d; do
+    for f in "$d"/*.xml; do
+        [ -f "$f" ] || continue
+        UNIT_SEEN=1
+        note "$(head -2 "$f" | grep -o 'name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"')"
+        head -2 "$f" | grep -q 'failures="0" errors="0"' || bad "unit failures in $f"
+    done
+done < <(unit_results_dirs)
+[ "$UNIT_SEEN" = 1 ] || bad "no unit result XML under $(unit_results_dirs | tr '\n' ' ')"
 
 if [ "$RESULTS_ONLY" = 1 ]; then
     [ "$FAIL" = 0 ] && echo "OK: results complete (video not checked)"

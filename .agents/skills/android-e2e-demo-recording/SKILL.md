@@ -1,14 +1,30 @@
 ---
 name: android-e2e-demo-recording
-description: Run nowinandroid unit + instrumented (Compose) tests on a Devin box, and record a single continuous side-by-side demo video of them. Use when asked to run the Android tests, verify them on an emulator, or produce a recording/demo of a test run.
+description: Run an Android app's unit + instrumented (Compose) tests on a Devin box, and record a single continuous side-by-side demo video of them. Use when asked to run the Android tests, verify them on an emulator, or produce a recording/demo of a test run.
 ---
 
-# nowinandroid tests on a Devin box: run them, and record them
+# Android tests on a Devin box: run them, and record them
 
 Two jobs live here. **If you only need results, stop after [Run and verify](#run-and-verify)** —
 everything below it is for producing a watchable demo and costs another ~10 minutes.
 
 Scripts do the work; this file explains when and why. All paths are relative to the repo root.
+
+## Nothing here is app-specific
+
+The scripts take module names, variant, tasks and AVD from `config.env` next to this file (environment
+variables override it); everything else — result-XML locations, test names, test count, the labels on
+the video — is discovered at runtime from Gradle output, the result XMLs, and `adb logcat`.
+
+```bash
+APP_MODULE=":app"                # Gradle path of the app module
+VARIANT="DemoDebug"              # capitalised variant; plain projects use "Debug"
+UNIT_TASKS=":core:domain:testDemoDebugUnitTest ..."   # default: <app>:test<Variant>UnitTest
+PAUSE_ARG="demoPauseMs"          # instrumentation arg the tests read to slow down for the camera
+AVD="test_device"                # default: the first installed AVD
+```
+
+To use this skill in another Android repo, copy the directory and edit those five values.
 
 ## Read this first: the three traps
 
@@ -32,8 +48,8 @@ with the shell that launched it (it looks like a clean boot followed by "no emul
 | Emulator boot | ~40s | — |
 | Pre-warm build (`--prewarm`) | 5-10 min | ~30s |
 | Unit tasks (2 modules) | ~1 min | ~2s |
-| `:app:connectedDemoDebugAndroidTest` | ~4 min | ~1m10s |
-| Full on-camera take at `demoPauseMs=1500` | — | ~3.5 min |
+| `$APP_MODULE:connected${VARIANT}AndroidTest` | ~4 min | ~1m10s |
+| Full on-camera take at `--pause-ms 1500` | — | ~3.5 min |
 
 Always pre-warm off camera. An un-warmed take is a five minute video of a Gradle build.
 
@@ -42,7 +58,7 @@ Always pre-warm off camera. An un-warmed take is a five minute video of a Gradle
 Provisioned by the repo blueprint; verify rather than assume:
 - JDK 21 (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`). JDK 17 fails Robolectric/AGP with
   "Android SDK 36 requires Java 21".
-- Android SDK 36 and a `test_device` AVD. The emulator needs KVM, so it must be launched via `sg kvm -c`
+- Android SDK 36 and at least one AVD. The emulator needs KVM, so it must be launched via `sg kvm -c`
   (see `scripts/boot_emulator.sh`) — the session shell does not inherit the kvm group.
 - `wmctrl`, `xdotool`, `ffmpeg`, `konsole` for the recording half.
 
@@ -97,7 +113,8 @@ $S/run_demo_suite.sh --pause-ms 1500
 # stop the recording; the chunks land in ~/screencasts/<recording-id>/
 $S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4
 $S/annotations_from_log.sh --epoch-file /tmp/recording_start_epoch
-$S/verify_evidence.sh --video take_1x.mp4
+$S/label_video.sh take_1x.mp4 take_1x_labelled.mp4 --epoch-file /tmp/recording_start_epoch
+$S/verify_evidence.sh --video take_1x_labelled.mp4
 ```
 
 `--prewarm` exits as soon as it is parsed, so run it on its own — combining it with `--pause-ms`
@@ -112,7 +129,8 @@ starts the terminal past the emulator's floating side-toolbar (a separate window
 polls for windows instead of sleeping, so it does not race konsole's startup, and it works on a display
 of any size.
 
-**Pauses come from the tests, opt-in.** `UserJourneysTest` reads a `demoPauseMs` instrumentation argument:
+**Pauses come from the tests, opt-in.** A test class opts in by reading `$PAUSE_ARG` (`demoPauseMs`
+here; in this repo `UserJourneysTest` does it):
 
 ```kotlin
 private val demoPauseMs: Long =
@@ -124,10 +142,10 @@ private fun demoPause() { if (demoPauseMs > 0) Thread.sleep(demoPauseMs) }
 fun holdFinalState() { if (demoPauseMs > 0) Thread.sleep(demoPauseMs * 2) }
 ```
 
-It defaults to 0, so CI and normal runs are untouched; at 1500ms each journey takes ~8-11s and the whole
-suite costs ~21s extra. Add the same three pieces to any other UI test class you want to demo, and call
+It defaults to 0, so CI and normal runs are untouched, and classes that ignore the argument still run
+normally — they are just too fast to watch. At 1500ms each journey takes ~8-11s and the whole suite
+costs ~21s extra. Add the same three pieces to any UI test class you want to demo, and call
 `demoPause()` after each meaningful assertion — a journey with no pauses is invisible in the video.
-File: `app/src/androidTest/kotlin/com/google/samples/apps/nowinandroid/ui/UserJourneysTest.kt`.
 
 **Labels are derived after the run, from timestamps.** `run_demo_suite.sh` starts an
 `adb logcat -v epoch -s TestRunner:I` watcher; `annotations_from_log.sh` turns that into
@@ -143,12 +161,9 @@ test** — the number of annotations is what the UI reports as the test count, w
 markers once surfaced a 19-test run as "2 tests passed". Test execution order is not source order; read
 it from the log.
 
-```bash
-# one drawtext filter per row of annotations_from_log.sh, offsets relative to the video
-ffmpeg -y -i take_1x.mp4 -vf "drawtext=text='navigationBar_reselectTab_keepsState':\
-x=20:y=20:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:enable='between(t,31,33)'" \
-    -c:a copy take_1x_labelled.mp4
-```
+`label_video.sh` builds one `drawtext` filter per row of `annotations_from_log.sh` and burns the name of
+the running test into its own time window. No test name appears anywhere in the skill: they come out of
+the device log, so the overlay follows whatever the app actually ran.
 
 **Device-only capture** is an alternative when the terminal is not needed (crisper, but loses the
 console): `adb shell screenrecord` writes ~180s per file, so loop segments and concat them.

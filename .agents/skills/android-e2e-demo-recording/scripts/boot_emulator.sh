@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Boot the test_device AVD and block until Android has finished booting.
-# Usage: boot_emulator.sh [--boot-anim]
+# Boot an AVD and block until Android has finished booting.
+# Usage: boot_emulator.sh [--boot-anim]      AVD: config.env, $AVD, or the first one installed
 set -euo pipefail
 
-AVD="${AVD:-test_device}"
+# shellcheck source=_config.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_config.sh"
+
 BOOT_ANIM_FLAG="-no-boot-anim"
 [ "${1:-}" = "--boot-anim" ] && BOOT_ANIM_FLAG=""
 
 export DISPLAY="${DISPLAY:-:0}"
 : "${ANDROID_HOME:?ANDROID_HOME is not set}"
+AVD="${AVD:-$("$ANDROID_HOME/emulator/emulator" -list-avds | head -1)}"
+[ -n "$AVD" ] || { echo "no AVD found; create one with avdmanager" >&2; exit 1; }
 
 if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx 1; then
     echo "emulator already booted"

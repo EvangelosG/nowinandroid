@@ -7,10 +7,12 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd "$SCRIPT_DIR/../../../.." || exit 1
+# shellcheck source=_config.sh
+. "$SCRIPT_DIR/_config.sh"
+cd "$REPO_ROOT" || exit 1
 
 PAUSE_MS=1500
-UNIT_TASKS=(:core:domain:testDemoDebugUnitTest :feature:search:impl:testDemoDebugUnitTest)
+read -r -a UNIT_TASK_LIST <<< "$UNIT_TASKS"
 JOURNEY_LOG=/tmp/journeys.log
 
 # Each phase starts on a clean screen so the video is readable. `clear` fails when
@@ -21,7 +23,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --pause-ms) PAUSE_MS="$2"; shift 2 ;;
         --prewarm)
-            ./gradlew :app:assembleDemoDebug :app:assembleDemoDebugAndroidTest "${UNIT_TASKS[@]}"
+            ./gradlew "$APP_MODULE:assemble$VARIANT" "$APP_MODULE:assemble${VARIANT}AndroidTest" \
+                "${UNIT_TASK_LIST[@]}"
             exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
@@ -37,7 +40,7 @@ date +%s > /tmp/demo_run_start_epoch
 
 # Gradle marks test tasks UP-TO-DATE on a re-run, so --rerun per task.
 RERUN_TASKS=()
-for t in "${UNIT_TASKS[@]}"; do RERUN_TASKS+=("$t" --rerun); done
+for t in "${UNIT_TASK_LIST[@]}"; do RERUN_TASKS+=("$t" --rerun); done
 
 screen_clear
 # grep -E, never -Ei: a case insensitive BUILD matches every "preBuild UP-TO-DATE"
@@ -46,16 +49,18 @@ screen_clear
     { grep -E 'Task :[A-Za-z0-9:_-]*UnitTest$|BUILD SUCCESSFUL|BUILD FAILED|FAILURE' || true; }
 
 screen_clear
-for f in core/domain/build/test-results/testDemoDebugUnitTest/*.xml \
-         feature/search/impl/build/test-results/testDemoDebugUnitTest/*.xml; do
-    [ -f "$f" ] || continue
-    head -2 "$f" | { grep -o 'name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' || true; }
-done
+while read -r d; do
+    for f in "$d"/*.xml; do
+        [ -f "$f" ] || continue
+        head -2 "$f" | { grep -o 'name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' || true; }
+    done
+done < <(unit_results_dirs)
 
 screen_clear
-# demoPauseMs is read by UserJourneysTest; it defaults to 0, so CI is unaffected.
-./gradlew :app:connectedDemoDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.demoPauseMs="$PAUSE_MS" --console=plain 2>&1 |
+# $PAUSE_ARG is read by the app's demo-aware test classes; it defaults to 0 there,
+# so CI is unaffected, and it is simply ignored by classes that do not read it.
+./gradlew "$CONNECTED_TASK" \
+    -Pandroid.testInstrumentationRunnerArguments."$PAUSE_ARG"="$PAUSE_MS" --console=plain 2>&1 |
     { grep -E 'Starting [0-9]+ tests|Tests [0-9]+/|Finished [0-9]+ tests|BUILD SUCCESSFUL|BUILD FAILED|FAILURE|failed' || true; }
 
 date +%s > /tmp/demo_run_end_epoch

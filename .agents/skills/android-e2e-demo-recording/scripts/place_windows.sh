@@ -4,7 +4,9 @@
 # Usage: place_windows.sh [workdir]
 set -euo pipefail
 
-WORKDIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
+# shellcheck source=_config.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_config.sh"
+WORKDIR="${1:-$REPO_ROOT}"
 export DISPLAY="${DISPLAY:-:0}"
 
 EMU_RE='Android Emulator - '
