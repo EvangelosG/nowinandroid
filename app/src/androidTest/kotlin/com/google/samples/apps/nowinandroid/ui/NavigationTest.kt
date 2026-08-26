@@ -112,10 +112,13 @@ class NavigationTest {
     @Before
     fun setup() = hiltRule.inject()
 
-    /** Rests on the end state so consecutive tests are distinguishable on the recording. */
+    /**
+     * Rests on the end state so consecutive tests are distinguishable on the recording. The floor is
+     * independent of [demoPauseMs]: the end state has to survive a few frames whatever the pace.
+     */
     @After
     fun holdFinalState() {
-        if (demoPauseMs > 0) Thread.sleep(demoPauseMs * 2)
+        if (demoPauseMs > 0) Thread.sleep(maxOf(demoPauseMs * 2, 3_000L))
     }
 
     @Test

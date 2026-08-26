@@ -49,7 +49,7 @@ with the shell that launched it (it looks like a clean boot followed by "no emul
 | Pre-warm build (`--prewarm`) | 5-10 min | ~30s |
 | Unit tasks (2 modules) | ~1 min | ~2s |
 | `$APP_MODULE:connected${VARIANT}AndroidTest` | ~4 min | ~1m10s |
-| Full on-camera take at `--pause-ms 1500` | — | ~3.5 min |
+| Full on-camera take at `--pause-ms 800` | — | ~3.5 min |
 
 Always pre-warm off camera. An un-warmed take is a five minute video of a Gradle build.
 
@@ -85,7 +85,7 @@ Verified on this box against `main`: 11 unit tests (`GetFollowableTopicsUseCaseT
 `SearchViewModelTest`) and 12 instrumented `NavigationTest` tests (`tests="12" skipped="1"`), so the
 console prints `Starting 12 tests` and logcat ends with `run finished: 11 tests, 0 failed, 1 ignored`
 — 11 of them actually execute and are annotatable. `NavigationTest` reads `demoPauseMs`, so
-`--pause-ms 1500` stretches those 11 from ~23s to a followable run.
+`--pause-ms 800` stretches those 11 from ~23s to a followable run.
 
 Result files, if you need them directly:
 - unit: `<module>/build/test-results/testDemoDebugUnitTest/*.xml`
@@ -108,7 +108,7 @@ $S/place_windows.sh                     # derives geometry from the actual displ
 # in the konsole that just opened, make it readable on video:
 #   printf '\033]50;FontSize=16\a'; clear
 # start the screen recording, then in that same konsole and nothing else:
-$S/run_demo_suite.sh --pause-ms 1500
+$S/run_demo_suite.sh --pause-ms 800
 # stop the recording; the chunks land in ~/screencasts/<recording-id>/
 $S/finalize_recording.sh ~/screencasts/<recording-id> take_1x.mp4   # also writes /tmp/video_start_epoch
 $S/label_video.sh take_1x.mp4 take_1x_labelled.mp4
@@ -145,13 +145,19 @@ private val demoPauseMs: Long =
 private fun demoPause() { if (demoPauseMs > 0) Thread.sleep(demoPauseMs) }
 
 @After  // rests on each journey's end state so consecutive tests are distinguishable
-fun holdFinalState() { if (demoPauseMs > 0) Thread.sleep(demoPauseMs * 2) }
+fun holdFinalState() { if (demoPauseMs > 0) Thread.sleep(maxOf(demoPauseMs * 2, 3_000L)) }
 ```
 
 It defaults to 0, so CI and normal runs are untouched, and classes that ignore the argument still run
-normally — they are just too fast to watch. At 1500ms each journey takes ~8-11s and the whole suite
-costs ~21s extra. Add the same three pieces to any UI test class you want to demo, and call
-`demoPause()` after each meaningful assertion — a journey with no pauses is invisible in the video.
+normally — they are just too fast to watch. At 800ms each journey takes ~4-7s.
+
+The final hold has its own floor rather than scaling with the pause, because the two are judged
+differently: the mid-test pauses set the pace, while the end state has to survive the ≥3 consecutive 1fps
+frames below whatever pace you pick. Scaling it (`pause * 2`) made 800ms fail that check at 1.6s while
+1500ms passed, i.e. it forced a slow run to get a readable ending.
+
+Add the same three pieces to any UI test class you want to demo, and call `demoPause()` after each
+meaningful assertion — a journey with no pauses is invisible in the video.
 
 **Labels are derived after the run, from timestamps.** `run_demo_suite.sh` starts an
 `adb logcat -v epoch -s TestRunner:I` watcher; `annotations_from_log.sh` turns that into
