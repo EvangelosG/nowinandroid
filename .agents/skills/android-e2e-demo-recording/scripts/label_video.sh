@@ -11,16 +11,27 @@
 # the recorder is already running by the time the run starts, and that gap is
 # however long the operator took to type, which drifts the labels by 2-3 tests.
 #
-# Usage: label_video.sh <in.mp4> <out.mp4> [--epoch-file FILE]
+# Usage: label_video.sh <in.mp4> <out.mp4> [--trim-head SECONDS] [--epoch-file FILE]
+#   --trim-head  seconds cut off the head of <in.mp4> since it was recorded;
+#                without it the labels lead the picture by exactly that much.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-IN="${1:?usage: label_video.sh <in.mp4> <out.mp4> [--epoch-file FILE]}"
-OUT="${2:?usage: label_video.sh <in.mp4> <out.mp4> [--epoch-file FILE]}"
+IN="${1:?usage: label_video.sh <in.mp4> <out.mp4> [--trim-head S] [--epoch-file FILE]}"
+OUT="${2:?usage: label_video.sh <in.mp4> <out.mp4> [--trim-head S] [--epoch-file FILE]}"
 shift 2
-[ $# -eq 0 ] && set -- --epoch-file /tmp/video_start_epoch
 
-ANN=$("$SCRIPT_DIR/annotations_from_log.sh" "$@" 2>/dev/null)
+TRIM_HEAD=0
+ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --trim-head) TRIM_HEAD="$2"; shift 2 ;;
+        *) ARGS+=("$1"); shift ;;
+    esac
+done
+[ "${#ARGS[@]}" -eq 0 ] && ARGS=(--epoch-file /tmp/video_start_epoch)
+
+ANN=$("$SCRIPT_DIR/annotations_from_log.sh" "${ARGS[@]}" 2>/dev/null)
 [ -n "$ANN" ] || { echo "no test windows in the log; nothing to label" >&2; exit 1; }
 
 # Keep the label inside the emulator pane rather than across the whole desktop.
@@ -35,6 +46,9 @@ fi
 FILTER=""
 while IFS=$'\t' read -r _class method start end; do
     [ "$end" = "?" ] && continue
+    start=$((start - TRIM_HEAD)); end=$((end - TRIM_HEAD))
+    [ "$end" -le 0 ] && continue
+    [ "$start" -lt 0 ] && start=0
     # Shrink long names so the label never spills into the console pane;
     # drawtext glyphs are roughly 0.55 * fontsize wide.
     FS=$(( (PANE_W - 20) * 100 / (55 * ${#method}) ))

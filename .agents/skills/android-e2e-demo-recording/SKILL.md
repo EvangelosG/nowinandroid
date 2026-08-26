@@ -202,7 +202,12 @@ ffmpeg -f concat -safe 0 -i /tmp/list.txt -c copy device.mp4
 measured wall clock in both directions (too short = the time-lapsed export; more than 2x = untrimmed
 idle or the wrong chunks). It cannot judge watchability, so eyeball the contact sheet that
 `finalize_recording.sh` wrote: every test should appear on it as a distinct screen under its own label.
-At the default pace that is ~2s per test — the labels, not the dwell time, are what make it followable.
+
+The default pace does not clear that bar and is not meant to: 11 tests in ~21s means 1-2s each, several
+of them showing the same screen, and a test whose window is entirely app restart gets a label over the
+launcher. Ship the default take as evidence that the suite ran green; for a video someone is expected to
+*watch*, use `--pause-ms 800` (~100s, every test 4-9s with a held end state) or `--pause-ms 400` for a
+middle ground.
 
 On a `--pause-ms` take, hold each journey's end state for ~3+ consecutive one-second frames. Check that
 with a per-pixel tolerance (max delta ~8) rather than by hashing frames: `libx264 crf 26` perturbs a
@@ -214,7 +219,15 @@ where the tolerant comparison found 4-6 in all 11.
 ffmpeg -ss 95 -to 155 -i take_1x.mp4 -vf "fps=1,crop=520:1130:0:20,scale=150:-1,tile=15x4" -frames:v 1 sheet.png
 ```
 
-Trim any leading idle with `-ss`. Ship one mp4.
+Trim idle at **both** ends before labelling, then regenerate the contact sheet — the finalizer's sheet
+samples the untrimmed file, so any tail you leave on eats the tiles. Budget for this: the duration guard
+allows 2x the run, which at the ~32s default pace is only ~30s of head and tail combined, and the gap
+between the run finishing and someone stopping the recorder eats that easily. Ship one mp4.
+
+```bash
+ffmpeg -y -ss 12 -to 56 -i take_1x.mp4 -c:v libx264 -crf 26 trimmed.mp4
+$S/label_video.sh trimmed.mp4 take_1x_labelled.mp4 --trim-head 12   # or the labels lead by 12s
+```
 
 Expect the console pane to sit empty for the first ~25s: each phase clears the screen and only its
 summary lines survive the filter. That is the filter working, not a failed capture.
